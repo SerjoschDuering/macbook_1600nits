@@ -44,7 +44,7 @@ class XDRBrightnessApp(rumps.App):
     # ─────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────
-        def _run_ddcctl(self, enable: bool) -> None:
+    def _run_ddcctl(self, enable: bool) -> None:
         """Call ddcctl via AppleScript so macOS will show a password prompt,
            and handle 'usage' failures gracefully."""
         brightness = BRIGHTNESS_XDR if enable else BRIGHTNESS_NORMAL
