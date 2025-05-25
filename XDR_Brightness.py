@@ -44,16 +44,16 @@ class XDRBrightnessApp(rumps.App):
     # ─────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────
-    def _run_ddcctl(self, enable: bool) -> None:
-        """Call ddcctl via AppleScript so macOS will show a password prompt."""
+        def _run_ddcctl(self, enable: bool) -> None:
+        """Call ddcctl via AppleScript so macOS will show a password prompt,
+           and handle 'usage' failures gracefully."""
         brightness = BRIGHTNESS_XDR if enable else BRIGHTNESS_NORMAL
-        # Build the AppleScript command:
         script = (
             f'do shell script "{DDCCTL_PATH} -d 1 -b {brightness}" '
             "with administrator privileges"
         )
+
         try:
-            # Ask macOS for admin rights via GUI prompt
             subprocess.run(
                 ["osascript", "-e", script],
                 check=True,
@@ -61,7 +61,20 @@ class XDRBrightnessApp(rumps.App):
                 stderr=subprocess.PIPE
             )
         except subprocess.CalledProcessError as exc:
-            rumps.alert(f"ddcctl failed:\n{exc.stderr.decode().strip()}")
+            err = exc.stderr.decode(errors="ignore").strip()
+
+            # ddcctl prints its usage whenever no DDC/CI display is found
+            if "Usage:" in err:
+                user_msg = (
+                    "Your built-in display doesn’t support DDC/CI.\n"
+                    "ddcctl only works on external monitors that expose DDC.\n"
+                    "macOS only enables full 1600-nit XDR when HDR content is active."
+                )
+            else:
+                user_msg = err or "Unknown error running ddcctl."
+
+            rumps.alert(f"Brightness change failed:\n{user_msg}")
+
 
 
     def _plist_path(self) -> Path:
