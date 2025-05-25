@@ -1,26 +1,12 @@
 #!/bin/bash
 
-# XDR Brightness Menu Bar App - One-Click Installer
-# This script installs everything you need automatically
+# Fixed XDR Brightness Menu Bar App Installer
 
-echo "🌞 XDR Brightness Menu Bar App Installer"
+echo "🌞 Fixing XDR Brightness Menu Bar App..."
 echo "========================================"
-echo ""
 
-# Check if Python 3 is installed
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is required but not installed."
-    echo "Please install Python 3 from: https://python.org"
-    exit 1
-fi
-
-# Create app directory
-APP_DIR="$HOME/Applications/XDR Brightness"
-mkdir -p "$APP_DIR"
-
-# Download the app script
-echo "📥 Downloading XDR Brightness app..."
-cat > "$APP_DIR/XDR_Brightness.py" << 'PYTHON_APP'
+# Create fixed Python app
+cat > "$HOME/Applications/XDR Brightness/XDR_Brightness.py" << 'FIXED_APP'
 #!/usr/bin/env python3
 """
 XDR Brightness Menu Bar App for macOS
@@ -32,7 +18,6 @@ import os
 import sys
 from pathlib import Path
 
-# Try to import rumps, install if needed
 try:
     import rumps
 except ImportError:
@@ -54,12 +39,12 @@ class XDRBrightnessApp(rumps.App):
             rumps.MenuItem("💡 Bright (1000 nits)", callback=self.set_bright),
             rumps.MenuItem("🖥️  Normal (500 nits)", callback=self.set_normal),
             rumps.MenuItem("🌙 Dim (250 nits)", callback=self.set_dim),
-            rumps.separator,
+            None,  # Separator
             rumps.MenuItem("✅ Enabled", callback=self.toggle_enabled),
-            rumps.separator,
+            None,  # Separator
             rumps.MenuItem("🚀 Launch at Startup", callback=self.toggle_startup),
             rumps.MenuItem("ℹ️  About", callback=self.show_about),
-            rumps.separator,
+            None,  # Separator
             rumps.MenuItem("Quit", callback=rumps.quit_application)
         ]
         self.update_menu_state()
@@ -84,10 +69,14 @@ class XDRBrightnessApp(rumps.App):
         """
         
         try:
-            process = subprocess.Popen(['swift', '-'], stdin=subprocess.PIPE, text=True)
-            process.communicate(input=swift_code)
-            self.current_brightness = level
+            process = subprocess.Popen(['swift', '-'], stdin=subprocess.PIPE, text=True, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate(input=swift_code)
+            if process.returncode != 0:
+                print(f"Swift error: {stderr}")
+            else:
+                self.current_brightness = level
         except Exception as e:
+            print(f"Error setting brightness: {e}")
             rumps.alert("Error", f"Failed to set brightness: {e}")
         
     def set_outdoor(self, _):
@@ -145,6 +134,9 @@ class XDRBrightnessApp(rumps.App):
         
     def enable_startup(self):
         """Enable launch at startup"""
+        # Get the actual script path
+        script_path = os.path.abspath(__file__)
+        
         plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -154,16 +146,23 @@ class XDRBrightnessApp(rumps.App):
     <key>ProgramArguments</key>
     <array>
         <string>{sys.executable}</string>
-        <string>{os.path.abspath(__file__)}</string>
+        <string>{script_path}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/xdr-brightness.err</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/xdr-brightness.out</string>
 </dict>
 </plist>"""
         
         plist_path = Path.home() / "Library/LaunchAgents/com.xdr.brightness.plist"
         plist_path.parent.mkdir(exist_ok=True)
         plist_path.write_text(plist_content)
+        
+        # Unload first if it exists, then load
+        subprocess.run(['launchctl', 'unload', str(plist_path)], stderr=subprocess.DEVNULL)
         subprocess.run(['launchctl', 'load', str(plist_path)])
         
     def disable_startup(self):
@@ -176,10 +175,15 @@ class XDRBrightnessApp(rumps.App):
     def update_menu_state(self):
         """Update menu checkmarks"""
         for item in self.menu:
-            if item.title.startswith("🚀 Launch at Startup"):
-                if self.is_startup_enabled():
-                    item.title = "🚀 Launch at Startup ✓"
-                break
+            # Skip None items (separators)
+            if item is None:
+                continue
+            # Check if this is a MenuItem with a title
+            if hasattr(item, 'title') and isinstance(item.title, str):
+                if item.title.startswith("🚀 Launch at Startup"):
+                    if self.is_startup_enabled():
+                        item.title = "🚀 Launch at Startup ✓"
+                    break
                 
     def show_about(self, _):
         """Show about dialog"""
@@ -187,81 +191,50 @@ class XDRBrightnessApp(rumps.App):
             "XDR Brightness",
             "Unlock the full 1600 nits brightness on your MacBook Pro!\n\n"
             "Created for outdoor work and bright environments.\n\n"
-            "⚠️ High brightness uses more battery and generates heat."
+            "⚠️ High brightness uses more battery and generates heat.\n\n"
+            "Version 1.0"
         )
         
     def show_notification(self, title, message):
         """Show a macOS notification"""
-        rumps.notification(
-            title="XDR Brightness",
-            subtitle=title,
-            message=message,
-            sound=False
-        )
+        try:
+            rumps.notification(
+                title="XDR Brightness",
+                subtitle=title,
+                message=message,
+                sound=False
+            )
+        except Exception as e:
+            print(f"Notification error: {e}")
 
 if __name__ == "__main__":
-    app = XDRBrightnessApp()
-    app.run()
-PYTHON_APP
+    try:
+        app = XDRBrightnessApp()
+        app.run()
+    except KeyboardInterrupt:
+        print("\nXDR Brightness stopped.")
+    except Exception as e:
+        print(f"Error: {e}")
+        rumps.alert("Error", f"XDR Brightness encountered an error:\n{e}")
+FIXED_APP
 
-# Make the script executable
-chmod +x "$APP_DIR/XDR_Brightness.py"
+# Make executable
+chmod +x "$HOME/Applications/XDR Brightness/XDR_Brightness.py"
 
-# Create launcher script
-echo "📝 Creating launcher..."
-cat > "$APP_DIR/Launch XDR Brightness.command" << 'LAUNCHER'
-#!/bin/bash
-cd "$(dirname "$0")"
-python3 XDR_Brightness.py
-LAUNCHER
-
-chmod +x "$APP_DIR/Launch XDR Brightness.command"
-
-# Create uninstaller
-echo "🗑️  Creating uninstaller..."
-cat > "$APP_DIR/Uninstall.command" << 'UNINSTALLER'
-#!/bin/bash
-echo "Uninstalling XDR Brightness..."
-
-# Remove from startup if enabled
-launchctl unload ~/Library/LaunchAgents/com.xdr.brightness.plist 2>/dev/null
-rm -f ~/Library/LaunchAgents/com.xdr.brightness.plist
-
-# Remove app directory
-rm -rf "$HOME/Applications/XDR Brightness"
-
-echo "✅ XDR Brightness has been uninstalled"
-UNINSTALLER
-
-chmod +x "$APP_DIR/Uninstall.command"
-
-# Install Python dependencies
-echo "📦 Installing dependencies..."
-python3 -m pip install --quiet rumps
-
-# Create desktop shortcut
-ln -sf "$APP_DIR/Launch XDR Brightness.command" "$HOME/Desktop/XDR Brightness"
-
+echo "✅ Fixed! Starting XDR Brightness..."
 echo ""
-echo "✅ Installation Complete!"
+echo "If you see ☀️ in your menu bar, it's working!"
+echo "Click it to access brightness controls."
 echo ""
-echo "🚀 TO START THE APP:"
-echo "   • Double-click 'XDR Brightness' on your Desktop"
-echo "   • Or run: open '$APP_DIR/Launch XDR Brightness.command'"
+
+# Kill any existing instances
+pkill -f "XDR_Brightness.py" 2>/dev/null
+
+# Start the app
+cd "$HOME/Applications/XDR Brightness"
+python3 XDR_Brightness.py &
+
+echo "🎉 XDR Brightness is now running!"
 echo ""
-echo "📱 USING THE APP:"
-echo "   • Look for ☀️ in your menu bar"
-echo "   • Click to access brightness presets"
-echo "   • Select '🚀 Launch at Startup' to auto-start"
-echo ""
-echo "⚠️  IMPORTANT:"
-echo "   • 1600 nits uses more battery"
-echo "   • Your MacBook may get warmer"
-echo "   • Perfect for outdoor work!"
-echo ""
-echo "🗑️  TO UNINSTALL:"
-echo "   Run: '$APP_DIR/Uninstall.command'"
-echo ""
-echo "Starting XDR Brightness now..."
-sleep 2
-open "$APP_DIR/Launch XDR Brightness.command"
+echo "To stop it: Click ☀️ in menu bar → Quit"
+echo "To auto-start: Click ☀️ → 🚀 Launch at Startup"
