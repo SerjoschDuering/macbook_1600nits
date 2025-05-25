@@ -45,14 +45,24 @@ class XDRBrightnessApp(rumps.App):
     # Helpers
     # ─────────────────────────────────────────────
     def _run_ddcctl(self, enable: bool) -> None:
-        """Call ddcctl with sudo; warns on failure."""
+        """Call ddcctl via AppleScript so macOS will show a password prompt."""
         brightness = BRIGHTNESS_XDR if enable else BRIGHTNESS_NORMAL
-        cmd = ["sudo", DDCCTL_PATH, "-d", "1", "-b", brightness]
-
+        # Build the AppleScript command:
+        script = (
+            f'do shell script "{DDCCTL_PATH} -d 1 -b {brightness}" '
+            "with administrator privileges"
+        )
         try:
-            subprocess.run(cmd, check=True)
+            # Ask macOS for admin rights via GUI prompt
+            subprocess.run(
+                ["osascript", "-e", script],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
         except subprocess.CalledProcessError as exc:
-            rumps.alert(f"ddcctl failed:\n{exc}")
+            rumps.alert(f"ddcctl failed:\n{exc.stderr.decode().strip()}")
+
 
     def _plist_path(self) -> Path:
         return Path.home() / "Library/LaunchAgents/com.xdr.brightness.plist"
